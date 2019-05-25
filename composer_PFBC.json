@@ -1,0 +1,16 @@
+{
+	"minimum-stability" : "dev",
+	"require" : {
+		"avbdr/php-bootstrap-form" : "dev-mdsupport"
+	},
+	"repositories" : [{
+			"type" : "vcs",
+			"url" : "https://github.com/mdsupport/php-bootstrap-form"
+		}
+	],
+	"autoload" : {
+		"psr-4" : {
+			"OpenEMR\\OeUI\\" : "library/oeUI/src"
+		}
+	}
+}
