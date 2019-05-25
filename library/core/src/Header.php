@@ -1,6 +1,6 @@
 <?php
 /**
- * OpenEMR <http://open-emr.org>.
+ * OpenEMR <https://open-emr.org>.
  *
  * @license https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
@@ -9,6 +9,7 @@ namespace OpenEMR\Core;
 
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
+use OpenEMR\Core\Assets;
 
 /**
  * Class Header.
@@ -25,6 +26,8 @@ use Symfony\Component\Yaml\Exception\ParseException;
  */
 class Header
 {
+    private static $scripts;
+    private static $links;
 
     /**
      * Setup various <head> elements.
@@ -99,19 +102,68 @@ class Header
             $assets = [$assets];
         }
 
+        // mdsupport - Switch off the following flag to use original includeAsset code
+        if (class_exists(Assets::class)) {
+            // Map old 'no_' style to exclude.
+            // Assets class expects caller to provide list of excluded assets as an optional parameter.
+            $exclAssets = [];
+            foreach ($assets as $ix => $strAsset) {
+                if (substr($strAsset, 0, 3) == 'no_') {
+                    $exclAssets[] = substr($strAsset, 3);
+                    unset($assets[$ix]);
+                }
+            }
+
+            // New asset config file processing
+            $objCfgAssets = new Assets();
+            if (file_exists($GLOBALS['fileroot'].'/custom/assets/custom.yaml')) {
+                $objCfgAssets->addConfig($GLOBALS['fileroot'].'/custom/assets/custom.yaml');
+            }
+
+            // Maintaining old style output
+            $strHtm = $objCfgAssets->getLinkTags($assets, $exclAssets)."\n";
+            $strHtm .= $objCfgAssets->getScriptTags($assets, $exclAssets)."\n";
+
+            return $strHtm;
+        }
+
         // @TODO Hard coded the path to the config file, not good RD 2017-05-27
         $map = self::readConfigFile("{$GLOBALS['fileroot']}/config/config.yaml");
-        $scripts = [];
-        $links = [];
+        self::$scripts = [];
+        self::$links = [];
 
+        self::parseConfigFile($map, $assets);
+
+        /* adding custom assets in addition */
+        if (is_file("{$GLOBALS['fileroot']}/custom/assets/custom.yaml")) {
+            $customMap = self::readConfigFile("{$GLOBALS['fileroot']}/custom/assets/custom.yaml");
+            self::parseConfigFile($customMap);
+        }
+
+        $linksStr = implode("", self::$links);
+        $scriptsStr = implode("", self::$scripts);
+        return "\n{$linksStr}\n{$scriptsStr}\n";
+    }
+
+    /**
+     * Parse assets from config file
+     *
+     * @param array $map Assets to parse into self::$scripts and self::$links
+     * @param array $selectedAssets
+     * @return void
+     */
+    private static function parseConfigFile($map, $selectedAssets = array())
+    {
         foreach ($map as $k => $opts) {
             $autoload = (isset($opts['autoload'])) ? $opts['autoload'] : false;
             $allowNoLoad= (isset($opts['allowNoLoad'])) ? $opts['allowNoLoad'] : false;
             $alreadyBuilt = (isset($opts['alreadyBuilt'])) ? $opts['alreadyBuilt'] : false;
+            $loadInFile = (isset($opts['loadInFile'])) ? $opts['loadInFile'] : false;
             $rtl = (isset($opts['rtl'])) ? $opts['rtl'] : false;
-            if ($autoload === true || in_array($k, $assets)) {
+
+            if ($autoload === true || in_array($k, $selectedAssets) || ($loadInFile && $loadInFile === self::getCurrentFile())) {
                 if ($allowNoLoad === true) {
-                    if (in_array("no_" . $k, $assets)) {
+                    if (in_array("no_" . $k, $selectedAssets)) {
                         continue;
                     }
                 }
@@ -119,29 +171,25 @@ class Header
                 $tmp = self::buildAsset($opts, $alreadyBuilt);
 
                 foreach ($tmp['scripts'] as $s) {
-                    $scripts[] = $s;
+                    self::$scripts[] = $s;
                 }
 
                 foreach ($tmp['links'] as $l) {
-                    $links[] = $l;
+                    self::$links[] = $l;
                 }
 
                 if ($rtl && $_SESSION['language_direction'] == 'rtl') {
                     $tmpRtl = self::buildAsset($rtl, $alreadyBuilt);
                     foreach ($tmpRtl['scripts'] as $s) {
-                        $scripts[] = $s;
+                        self::$scripts[] = $s;
                     }
 
                     foreach ($tmpRtl['links'] as $l) {
-                        $links[] = $l;
+                        self::$links[] = $l;
                     }
                 }
             }
         }
-
-        $linksStr = implode("", $links);
-        $scriptsStr = implode("", $scripts);
-        return "\n{$linksStr}\n{$scriptsStr}\n";
     }
 
     /**
@@ -155,7 +203,8 @@ class Header
     {
         $script = (isset($opts['script'])) ? $opts['script'] : false;
         $link = (isset($opts['link'])) ? $opts['link'] : false;
-        $basePath = self::parsePlaceholders($opts['basePath']);
+        $path = (isset($opts['basePath'])) ? $opts['basePath'] : '';
+        $basePath = self::parsePlaceholders($path);
 
         $scripts = [];
         $links = [];
@@ -167,7 +216,7 @@ class Header
             } else {
                 $path = self::createFullPath($basePath, $script);
             }
-            $scripts[] = self::createElement($path, 'script');
+            $scripts[] = self::createElement($path, 'script', $alreadyBuilt);
         }
 
         if ($link) {
@@ -186,7 +235,7 @@ class Header
                 } else {
                     $path = self::createFullPath($basePath, $l);
                 }
-                $links[] = self::createElement($path, 'link');
+                $links[] = self::createElement($path, 'link', $alreadyBuilt);
             }
         }
 
@@ -196,7 +245,7 @@ class Header
     /**
      * Parse a string for $GLOBAL key placeholders %key-name%.
      *
-     * Perform a regex match all in the given subject for anything warpped in
+     * Perform a regex match all in the given subject for anything wrapped in
      * percent signs `%some-key%` and if that string exists in the $GLOBALS
      * array, will replace the occurence with the value of that key.
      *
@@ -225,15 +274,17 @@ class Header
      * @param string $type Must be `script` or `link`
      * @return string mixed HTML element
      */
-    private static function createElement($path, $type)
+    private static function createElement($path, $type, $alreadyBuilt)
     {
 
         $script = "<script type=\"text/javascript\" src=\"%path%\"></script>\n";
         $link = "<link rel=\"stylesheet\" href=\"%path%\" type=\"text/css\">\n";
 
         $template = ($type == 'script') ? $script : $link;
-        $v = $GLOBALS['v_js_includes'];
-        $path = $path . "?v={$v}";
+        if (!$alreadyBuilt) {
+            $v = $GLOBALS['v_js_includes'];
+            $path = $path . "?v={$v}";
+        }
         return str_replace("%path%", $path, $template);
     }
 
@@ -264,5 +315,16 @@ class Header
             error_log($e->getMessage());
             // @TODO need to handle this better. RD 2017-05-24
         }
+    }
+
+    /**
+     * Return relative path to current file
+     *
+     * @return string The  current file
+     */
+    private static function getCurrentFile()
+    {
+        //remove web root and query string
+        return str_replace($GLOBALS['webroot'].'/', '', strtok($_SERVER["REQUEST_URI"], '?'));
     }
 }
