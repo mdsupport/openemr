@@ -1,0 +1,105 @@
+---
+# List of Authentication services providers
+# Check For full list of current options at https://hybridauth.github.io/providers.html 
+#
+# Example usage:
+# providers: Top-level key name (Required)
+#     adapter-name: Must match adapter available (case sensetive)
+#         keys: Some of the providers support multiple keysentials
+#             key: Credential key registered with the provider
+#             secret: Corresponding secret string
+#         enabled: true (defaults to false)
+#         fa: fontawesome icon sfx (optional, do not include if icon is available)
+
+callback: https://<emr-root>/interface/login/hauth_check.php
+providers:
+    AOLOpenID:
+        type: OpenID
+    Authentiq:
+        type: OAuth2
+    BitBucket:
+        type: OAuth2
+    Blizzard:
+        type: OAuth2
+    Discord:
+        type: OAuth2
+    Disqus:
+        type: OAuth2
+    Dribbble:
+        type: OAuth2
+    Facebook:
+        keys:
+            id: required
+            secret: required
+        enabled: true
+        fa: facebook-f bg-primary text-light
+        type: OAuth2
+    Foursquare:
+        type: OAuth2
+    GitHub:
+        keys:
+            key: <github key>
+            secret: <github secret>
+        enabled: true
+        force_login: true
+        fa: github bg-dark text-light
+        type: OAuth2
+    GitLab:
+        type: OAuth2
+    Google:
+        callback: https://<emr-root>/interface/login/hauth_check.php
+        keys:
+            id: <xx-xx.apps.googleusercontent.com>
+            secret: <xx-xx>
+        enabled: true
+        fa: google bg-light text-danger
+        type: OAuth2
+    Instagram:
+        type: OAuth2
+    LinkedIn:
+        type: OAuth2
+    Mailru:
+        type: OAuth2
+    MicrosoftGraph:
+        type: OAuth2
+    Odnoklassniki:
+        type: OAuth2
+    OpenID:
+        type: OpenID
+    PaypalOpenID:
+        type: OpenID
+    Reddit:
+        type: OAuth2
+    Spotify:
+        type: OAuth2
+    StackExchange:
+        type: OAuth2
+    StackExchangeOpenID:
+        type: OpenID
+    Steam:
+        type: Hybrid
+    SteemConnect:
+        type: OAuth2
+    Tumblr:
+        type: OAuth1
+    TwitchTV:
+        type: OAuth2
+    Twitter:
+        type: OAuth1
+    Vkontakte:
+        type: OAuth2
+    WeChat:
+        type: OAuth2
+    WindowsLive:
+        keys:
+            id: <live id>
+            secret: <live secret>
+        enabled: true
+        fa: windows bg-info text-light
+        type: OAuth2
+    WordPress:
+        type: OAuth2
+    Yahoo:
+        type: OAuth2
+    YahooOpenID:
+        type: OpenID

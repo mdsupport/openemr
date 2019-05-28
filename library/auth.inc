@@ -29,6 +29,42 @@ require_once("{$GLOBALS['srcdir']}/log.inc");
 require_once("{$GLOBALS['srcdir']}/acl.inc");
 require_once("$srcdir/authentication/login_operations.php");
 
+$log_caller = [
+    // $_SERVER keys of interest
+    'REMOTE_ADDR', 'SCRIPT_FILENAME', 'PHP_SELF', 'argv', 'QUERY_STRING', 'HTTP_REFERER', 'PHP_AUTH_USER',
+    // $_SESSION keys of interest
+    'authUser', 'authUserID', 'authId', 'userauthorized', "last_update", 'authGroup', 'authProvider',
+];
+$log_caller = array_flip($log_caller);
+$log_caller = array_merge(
+    array_intersect_key($_SERVER, $log_caller),
+    array_intersect_key($_SESSION, $log_caller)
+);
+//If session has timed out / been destroyed, logout record for null user/provider will be invalid.
+// Placeholder adjustments to $log_caller to prevent nulls in log
+if (is_null($_SESSION['authUser'])) {
+    $log_caller['authUser'] = '';
+}
+if (is_null($_SESSION['authProvider'])) {
+    $log_caller['authProvider'] = '';
+}
+$log_caller_print = print_r($log_caller, true);
+
+// Fast track logout requests
+if ((isset($_GET['auth'])) && ($_GET['auth'] == "logout")) {
+    // TBD : Fix adodb qstr on null
+    if (isset($_SESSION['authUser']) || isset($_SESSION['authProvider'])) {
+        newEvent("logout", $log_caller['authUser'], $log_caller['authProvider'], 1, "Session closed : ".$log_caller_print);
+    }
+    authCloseSession();
+    authLoginScreen(true);
+    exit;
+}
+
+use Hybridauth\Storage\Session;
+$hauth_storage = new Session();
+$hauth_user = $hauth_storage->get('user');
+
 $incoming_site_id = '';
 
 if (isset($_GET['auth']) && ($_GET['auth'] == "login") && isset($_POST['authUser']) &&
@@ -62,10 +98,39 @@ if (isset($_GET['auth']) && ($_GET['auth'] == "login") && isset($_POST['authUser
     unset($_SESSION['loginfailure']);
     //store the very first initial timestamp for timeout errors
     $_SESSION["last_update"] = time();
-} else if ((isset($_GET['auth'])) && ($_GET['auth'] == "logout")) {
-    newEvent("logout", $_SESSION['authUser'], $_SESSION['authProvider'], 1, "success");
-    authCloseSession();
-    authLoginScreen(true);
+} else if (!empty($hauth_user)) {
+    if (isset($_GET['hauth'])) {
+        // User authenticated and mapped in hyperauth framework
+        $hauth_token = $hauth_storage->get('conn');
+        $hauth_storage->delete('conn');
+        if (($_GET['hauth'] == $hauth_token) || (verify_user_gacl_group($hauth_user['name']))) {
+            // Set php session stuff
+            // Until a common method
+            $_SESSION['authUser'] = $hauth_user['name'];
+            $_SESSION['authUserID'] = $hauth_user['id'];
+            $_SESSION['authId'] = $hauth_user['id'];
+            $_SESSION['userauthorized'] = $hauth_user['authorized'];
+            $_SESSION["last_update"] = time();
+    
+            // Screw the "group" hell - provider is group and group is name?
+            // This is the reason MIT nerds thought of objects!
+            $_SESSION['authGroup'] = 'Default';
+            $_SESSION['authProvider'] = 'Default';
+    
+            $log_comment = "Login thru ".$hauth_user['provider']." : ".print_r($hauth_user, true);
+            newEvent("login", $_SESSION['authUser'], $_SESSION['authProvider'], 1, $log_comment);
+        } else {
+            // Invalid login attempt
+            $hauth_storage->clear();
+            $_SESSION['loginfailure'] = 1;
+        }
+    } else {
+        // Setup additional checks for hyperauth related logins here
+    }
+    if (empty($hauth_storage->get('user'))) {
+        authCloseSession();
+        authLoginScreen(true);
+    }
 } else {
     if (authCheckSession()) {
         if (isset($_SESSION['pid']) && empty($GLOBALS['DAEMON_FLAG'])) {
@@ -81,7 +146,10 @@ if (isset($_GET['auth']) && ($_GET['auth'] == "login") && isset($_POST['authUser
         //LOG EVERYTHING
         //newEvent("view", $_SESSION['authUser'], $_SESSION['authProvider'], $_SERVER['REQUEST_URI']);
     } else {
-        newEvent("login", $_POST['authUser'], $_POST['authProvider'], 0, "insufficient data sent");
+        if (isset($_SESSION['authUser']) || isset($_SESSION['authProvider'])) {
+            $log_comment = "Insufficient data : ".print_r($log_caller, true);
+            newEvent("login", $_SESSION['authUser'], $_SESSION['authProvider'], 0, $log_comment);
+        }
         authLoginScreen();
     }
 }

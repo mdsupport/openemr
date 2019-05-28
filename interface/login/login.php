@@ -26,11 +26,11 @@
  */
 
 
-
-use OpenEMR\Core\Header;
-
 $ignoreAuth=true;
 require_once("../globals.php");
+require_once('hauth_providers.php');
+
+use OpenEMR\Core\Header;;
 
 // mdsupport - Add 'App' functionality for user interfaces without standard menu and frames
 // If this script is called with app parameter, validate it without showing other apps.
@@ -40,19 +40,23 @@ $emr_app = array();
 if ($GLOBALS['new_tabs_layout']) {
     $rs = sqlStatement(
         "SELECT option_id, title,is_default FROM list_options
-			WHERE list_id=? and activity=1 ORDER BY seq, option_id",
+        WHERE list_id=? and activity=1 ORDER BY seq, option_id",
         array ('apps')
     );
     if (sqlNumRows($rs)) {
         while ($app = sqlFetchArray($rs)) {
+            $appKey = trim($app['option_id']);
             $app_req = explode('?', trim($app['title']));
-            if (! file_exists('../'.$app_req[0])) {
-                continue;
+            $emr_app[$appKey] = array(
+                'url' => trim($app ['title']),
+                'disabled' => (file_exists($GLOBALS['webserver_root'].'/'.$app_req[0]) ? '': ' disabled'),
+                'selected' => '',
+            );
+            if (($app['is_default']) && (empty($emr_app[$appKey]['disabled']))) {
+                $emr_app[$appKey]['selected'] =' selected="selected"';
             }
-
-                $emr_app [trim($app ['option_id'])] = trim($app ['title']);
-            if ($app ['is_default']) {
-                $emr_app_def = $app ['option_id'];
+            if ($app_req[0] == 'interface/main/main_screen.php') {
+                $emr_app['main'] = $appKey;
             }
         }
     }
@@ -61,21 +65,23 @@ if ($GLOBALS['new_tabs_layout']) {
 $div_app = '';
 if (count($emr_app)) {
     // Standard app must exist
-    $std_app = 'main/main_screen.php';
-    if (!in_array($std_app, $emr_app)) {
-        $emr_app['*OpenEMR'] = $std_app;
+
+    if (empty($emr_app['main'])) {
+        $emr_app = array('*OpenEMR' => array('url' => 'interface/main/main_screen.php')) + $emr_app;
     }
 
     if (isset($_REQUEST['app']) && $emr_app[$_REQUEST['app']]) {
         $div_app = sprintf('<input type="hidden" name="appChoice" value="%s">', attr($_REQUEST['app']));
     } else {
-        foreach ($emr_app as $opt_disp => $opt_value) {
-            $opt_htm .= sprintf(
-                '<option value="%s" %s>%s</option>\n',
-                attr($opt_disp),
-                ($opt_disp == $opt_default ? 'selected="selected"' : ''),
-                text(xl_list_label($opt_disp))
-            );
+        $opt_htm = '';
+        foreach ($emr_app as $opt_disp => $aOpt) {
+            if (!empty($aOpt['url'])) {
+                $opt_htm .= sprintf(
+                    '<option value="%s"%s%s>%s</option>%s',
+                    attr($opt_disp), $aOpt['selected'], $aOpt['disabled'], 
+                    text(xl_list_label($opt_disp). (empty($aOpt['disabled']) ? '' : ' **'.xl('Fix this').'**')), PHP_EOL
+                );
+            }
         }
 
         $div_app = sprintf(
@@ -104,7 +110,7 @@ if (count($emr_app)) {
 
     <link rel="shortcut icon" href="<?php echo $GLOBALS['images_static_relative']; ?>/favicon.ico" />
 
-    <script type="text/javascript">
+    <script>
         var registrationTranslations = <?php echo json_encode(array(
             'title' => xla('OpenEMR Product Registration'),
             'pleaseProvideValidEmail' => xla('Please provide a valid email address'),
@@ -125,11 +131,12 @@ if (count($emr_app)) {
         ?>;
     </script>
 
-    <script type="text/javascript" src="<?php echo $webroot ?>/interface/product_registration/product_registration_service.js?v=<?php echo $v_js_includes; ?>"></script>
-    <script type="text/javascript" src="<?php echo $webroot ?>/interface/product_registration/product_registration_controller.js?v=<?php echo $v_js_includes; ?>"></script>
+    <script src="<?php echo $webroot ?>/interface/product_registration/product_registration_service.js?v=<?php echo $v_js_includes; ?>"></script>
+    <script src="<?php echo $webroot ?>/interface/product_registration/product_registration_controller.js?v=<?php echo $v_js_includes; ?>"></script>
 
-    <script type="text/javascript">
-        jQuery(document).ready(function() {
+    <script>
+        $(function()
+        {
             init();
 
             var productRegistrationController = new ProductRegistrationController();
@@ -164,18 +171,30 @@ if (count($emr_app)) {
 
 </head>
 <body class="login">
+<?php // Show alerts
+    if (isset($_GET['hautherr'])) {
+        printf(
+            '<div class="alert alert-danger" role="alert">
+            %s - %s
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            </div>',
+            xlt('Authentication error'), ($_GET['hautherr'] ? text($_GET['hautherr']) : '')
+        );
+    }
+?>
     <div class="container">
-        <form method="POST" id="login_form"
+        <div class="row">
+          <img class="img-fluid img-responsive float-left" src="<?php echo $GLOBALS['images_static_relative']; ?>/login-logo.png"
+              style='max-height: 80px;' />
+        </div>
+
+        <form method="POST" id="login_form" autocomplete="off"
             action="../main/main_screen.php?auth=login&site=<?php echo attr($_SESSION['site_id']); ?>"
             target="_top" name="login_form" onsubmit="return imsubmitted();">
+            <input type='hidden' name='new_login_session_management' value='1' />
             <div class="row">
-                <div class="col-sm-12">
+                <div class="col-12">
                     <div>
-                        <div class="center-block" style="max-width:400px">
-                            <img class="img-responsive center-block" src="<?php echo $GLOBALS['images_static_relative']; ?>/login-logo.png" />
-                        </div>
-
-                        <input type='hidden' name='new_login_session_management' value='1' />
 
                         <?php
                         // collect groups
@@ -241,26 +260,23 @@ if (count($emr_app)) {
                     </div>
                 </div>
             </div>
-            <?php if (isset($_SESSION['relogin']) && ($_SESSION['relogin'] == 1)) : // Begin relogin dialog ?>
             <div class="row">
                 <div class="col-sm-12">
-                    <p>
-                        <strong><?php echo xlt('Password security has recently been upgraded.'); ?><br>
-                        <?php echo xlt('Please login again.'); ?></strong>
-                    </p>
-                    <?php unset($_SESSION['relogin']); ?>
-                </div>
-            </div>
-            <?php endif; ?>
-            <?php if (isset($_SESSION['loginfailure']) && ($_SESSION['loginfailure'] == 1)) : // Begin login failure block ?>
-            <div class="row">
-                <div class="col-sm-12">
-                    <div class="well well-lg login-failure">
+                    <?php if (isset($_SESSION['relogin']) && ($_SESSION['relogin'] == 1)) : // Begin relogin dialog ?>
+                    <div class="alert alert-info m-1">
+                        <strong>
+                            <?php echo xlt('Password security has recently been upgraded.').'&nbsp;&nbsp;'.xlt('Please login again.'); ?>
+                        </strong>
+                    </div>
+                    <?php unset($_SESSION['relogin']);
+                    endif;
+if (isset($_SESSION['loginfailure']) && ($_SESSION['loginfailure'] == 1)) : // Begin login failure block ?>
+                    <div class="alert alert-danger login-failure m-1">
                         <?php echo xlt('Invalid username or password'); ?>
                     </div>
+                    <?php endif; // End login failure block?>
                 </div>
             </div>
-            <?php endif; // End login failure block?>
             <div class="row">
                 <?php
                 $extraLogo = $GLOBALS['extra_logo_login'];
@@ -352,7 +368,26 @@ if (count($emr_app)) {
                             </div>
                         </div>
                     <?php endif; // End language menu block ?>
-                    <div class="form-group pull-right">
+                    </div>
+                    <div class="col-12">
+                    <?php
+                    $btn_htm = '';
+                    $objAuthSvcs = localAuthSvcs(true);
+                    foreach ($objAuthSvcs->getProviders() as $name) {
+                        $cfg = $objAuthSvcs->getProviderConfig($name);
+                        $btn_htm .= sprintf(
+                            '<button type="button" class="hauth-provider btn btn-sm btn-light text-dark m-0 p-0 mr-1" data-provider="%s" title="%s">%s</button>',
+                            attr($name), attr($name), (isset($cfg['fa']) ? '<i class="fa fa-'.$cfg['fa'].' p-2"></i>' : text($name))
+                            );
+                    }
+                    if (strlen($btn_htm) > 0) {
+                    ?>
+                    <div class="btn-toolbar btn-toolbar-sm float-left mt-3" role="toolbar">
+                        <?php echo $btn_htm; ?>
+                    </div>
+                    <?php } ?>
+
+                    <div class="form-group float-right">
                         <button type="submit" class="btn btn-default btn-lg" onClick="transmit_form()"><i class="fa fa-sign-in"></i>&nbsp;&nbsp;<?php echo xlt('Login');?></button>
                     </div>
                 </div>
@@ -369,5 +404,12 @@ if (count($emr_app)) {
             </div>
         </form>
     </div>
+    <script>
+    $('.hauth-provider').on('click', function()
+    {
+        // If multi group, hope user remembered to select correct group on login screen - needs sanitizer on other end
+        window.location.href = 'hauth_check.php?provider='+$(this).data('provider')+'&emrgroup='+$('input[name="authProvider"]:first').val();
+    });
+    </script>
 </body>
 </html>
