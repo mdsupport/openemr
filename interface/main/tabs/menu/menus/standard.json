@@ -1179,9 +1179,23 @@
         "global_req": "ippf_specific"
       },
       {
-        "label": "Other",
+        "label": "Optional Features",
         "icon": "fa-caret-right",
         "children": [
+          {
+            "label": "Manage",
+            "menu_id": "omm0",
+            "target": "adm",
+            "url": "/modules/OeModule/OmManager/OmManager.php",
+            "children": [],
+            "requirement": 0,
+            "acl_req": [
+              "admin",
+              "super"
+            ],
+            "global_req": [
+            ]
+          },
           {
             "label": "eRx Logs",
             "menu_id": "adm0",
