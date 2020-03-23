@@ -72,7 +72,9 @@ class ModulesApplication
     private function bootstrapCustomModules($eventDispatcher, $customModulePath)
     {
         // we skip the audit log as it has no bearing on user activity and is core system related...
-        $resultSet = sqlStatementNoLog($statement = "SELECT mod_name, mod_directory FROM modules WHERE mod_active = 1 AND type != 1 ORDER BY `mod_ui_order`, `date`");
+        // and exclude OeModules
+        $resultSet = sqlStatementNoLog($statement = "SELECT mod_name, mod_directory FROM modules 
+            WHERE mod_active = 1 AND type != 1 and mod_type != 'OeModule' ORDER BY `mod_ui_order`, `date`");
         $db_modules = [];
         while ($row = sqlFetchArray($resultSet)) {
             $db_modules[] = ["name" => $row["mod_name"], "directory" => $row['mod_directory'], "path" => $customModulePath . $row['mod_directory']];
