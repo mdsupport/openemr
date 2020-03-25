@@ -17,6 +17,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Laminas\Mvc\Application;
 use Laminas\Mvc\Service\ServiceManagerConfig;
 use Laminas\ServiceManager\ServiceManager;
+use OpenEMR\Menu\MenuEvent;
 
 class ModulesApplication
 {
@@ -73,11 +74,16 @@ class ModulesApplication
     {
         // we skip the audit log as it has no bearing on user activity and is core system related...
         // and exclude OeModules
-        $resultSet = sqlStatementNoLog($statement = "SELECT mod_name, mod_directory FROM modules 
-            WHERE mod_active = 1 AND type != 1 and mod_type != 'OeModule' ORDER BY `mod_ui_order`, `date`");
+        $resultSet = sqlStatementNoLog($statement = "SELECT mod_type, mod_name, mod_directory FROM modules
+            WHERE mod_active = 1 AND type != 1 ORDER BY `mod_ui_order`, `date`");
         $db_modules = [];
         while ($row = sqlFetchArray($resultSet)) {
-            $db_modules[] = ["name" => $row["mod_name"], "directory" => $row['mod_directory'], "path" => $customModulePath . $row['mod_directory']];
+            $db_modules[] = [
+                "name" => $row["mod_name"],
+                "directory" => $row['mod_directory'],
+                "path" => $customModulePath . $row['mod_directory'],
+                'type' => $row['mod_type'],
+            ];
         }
         foreach ($db_modules as $module) {
             $this->loadCustomModule($module, $eventDispatcher);
@@ -87,6 +93,40 @@ class ModulesApplication
 
     private function loadCustomModule($module, $eventDispatcher)
     {
+        // Bootstrap OeModule
+        if ($module['type'] == 'OeModule') {
+            // OeModule record their listeners in modules_settings table as 'listeners' => {event:callable}
+            // @TBD - Add om_value/om_setting field rather than using `path`
+            $omCls = $module['directory'];
+            $omRec = sqlQuery('SELECT path AS om_value, mo.directory om_listeners_dir FROM modules_settings ms
+                INNER JOIN modules mo ON ms.mod_id = mo.mod_id
+                WHERE mo.mod_directory=? and ms.obj_name=?',
+                [$omCls, 'listeners']
+            );
+            // Bail in case of no listeners
+            if (empty($omRec['om_value'])) return true;
+            $aaListners = json_decode($omRec['om_value'], true);
+            // Bail in case of json errors
+            if ((json_last_error() !== JSON_ERROR_NONE) || (count($aaListners) == 0)) return true;
+            /**
+             * @TBD - Use class method or a random file in the module code directory?
+             * 
+            $objOm = new $omCls;
+            foreach ($aaListners as $appEvt => $omMethod) {
+                $eventDispatcher->addListener($appEvt, [$objOm, $omMethod]);
+            }
+             */
+            foreach ($aaListners as $appEvt => $omMethod) {
+                try
+                {
+                    $incPath = sprintf("%s%s/%s", $GLOBALS['fileroot'], $omRec['om_listeners_dir'], $omMethod);
+                    include_once($incPath);
+                } catch (\Exception $exception) {
+                    error_log(errorLogEscape($exception->getMessage()));
+                }
+            }
+            return true;
+        }
         if (!is_readable($module['path'] . '/' . attr(self::CUSTOM_MODULE_BOOSTRAP_NAME))) {
             error_log("Custom module file path " . errorLogEscape($module['path'])
                 . '/' . self::CUSTOM_MODULE_BOOSTRAP_NAME
@@ -97,7 +137,7 @@ class ModulesApplication
             // do we really want to just include a file??  Should we go all zend and actually force a class instantiation
             // here and then inject the EventDispatcher or even possibly the Symfony Kernel here?
             include $module['path'] . '/' . attr(self::CUSTOM_MODULE_BOOSTRAP_NAME);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             error_log(errorLogEscape($exception->getMessage()));
         }
     }
