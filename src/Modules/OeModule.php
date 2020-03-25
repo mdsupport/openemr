@@ -31,15 +31,27 @@ abstract class OeModule
 
     /*
      * Implement following map to legacy modules_settings table
-     * key (obj_name) : Settings key (e.g. connection_type)
-     * value_json (path) : Json encoded value of the setting
+     * Expected to provide details on how om_key values should be handled.
+     * om_key (obj_name) : Settings key typically matches om_key (e.g. connection_type)
+     * om_value (path) : Json encoded value of the setting
+     *
+     * Remove mapping after adding columns used for OeModule
+     */
+    static $DBREC_MODSET = [
+        'om_key' => 'obj_name',         // Configuration key
+        'om_value' => 'path',           // Json encoded maintenance settings
+    ];
+
+    /*
+     * Implement following map to legacy module_configuration table
+     * om_key (field_name) : Settings key (e.g. connection_type)
+     * om_value (field_value) : Value of the setting
      *
      * Remove mapping after adding columns used for OeModule
      */
     static $DBREC_MODCFG = [
-        'om_cfg_key' => 'obj_name',         // Configuration key
-        'om_cfg_value' => 'menu_name',      // Configured value
-        'om_cfg_maint' => 'path',           // Json encoded maintenance settings
+        'om_key' => 'field_name',         // Configuration key
+        'om_value' => 'field_value',      // Configured value
     ];
 
     // Every module should at minimum specify the properties included in $modProp.
@@ -204,16 +216,16 @@ abstract class OeModule
     }
 
     /**
-     * Get settings if module is configured.
-     * @Return array - module_settings table records associated with module.
+     * Get settings for the module.
+     * @Return array - modules_settings table records associated with module.
      */
-    protected function getModuleCfg($cache_ok=true) {
+    protected function getModuleSettings($cache_ok=true) {
         $db_settings = $this->getProp('db_settings');
         if ((!empty($db_settings)) && $cache_ok) return $db_settings;
 
         // Map until db changes are done
         $mappedCols = '';
-        foreach (OeModule::$DBREC_MODCFG as $ocol => $mcol) {
+        foreach (OeModule::$DBREC_MODSET as $ocol => $mcol) {
             $mappedCols .= ", $mcol as $ocol";
         }
 
@@ -225,9 +237,9 @@ abstract class OeModule
             );
         if (!$db_settings) {
             while ($recSettings = sqlFetchArray($rsSettings)) {
-                $aaValues = json_decode($recSettings['value_json'], true);
-                $db_settings[$recSettings['om_cfg_key']] =
-                    (json_last_error()==JSON_ERROR_NONE ? $aaValues : $recSettings['om_cfg_maint']);
+                $aaValues = json_decode($recSettings['om_value'], true);
+                $db_settings[$recSettings['om_key']] =
+                (json_last_error()==JSON_ERROR_NONE ? $aaValues : $recSettings['om_value']);
             }
             $this->setProp('db_settings', $db_settings);
         }
@@ -235,12 +247,12 @@ abstract class OeModule
     }
 
     /**
-     * Set configuration for a module - saved in modules_settings table
-     * @param array $aSettings - array of records using keys for DBREC_MODCFG
+     * Save settings in modules_settings table
+     * @param array $aSettings - array of records using keys for DBREC_MODSET
      * @param boolean $allSettings - If true, module configuration is deleted first.
      * @return array - array of all configured settings.
      */
-    protected function setModuleCfg($aSettings, $allSettings=false) {
+    protected function setModuleSettings($aSettings, $allSettings=false) {
         $db_modules = $this->getProp('db_modules');
         // Must have valid registered module for any settings.
         if (!$db_modules) return false;
@@ -252,25 +264,25 @@ abstract class OeModule
         }
 
         // Module is expected to provide array of arrays.
-        if (!empty($aSettings['om_cfg_key'])) {
+        if (!empty($aSettings['om_key'])) {
             // Handle situation when a single record is provided.
             $aSettings = [$aSettings];
         }
 
-        // Process all setting records
+        // Process all settings records
         $db_settings = $this->getProp('db_settings');
         foreach ($aSettings as $aaSetting) {
             // Map until db changes are done
             $cols = [];
-            foreach (OeModule::$DBREC_MODCFG as $ocol => $mcol) {
+            foreach (OeModule::$DBREC_MODSET as $ocol => $mcol) {
                 $cols[$mcol] = $aaSetting[$ocol];
                 unset($aaSetting[$ocol]);
             }
-            // Remaining elements are combined into om_cfg_maint map
+            // Remaining elements are combined into om_value map
             if (count($aaSetting) > 0) {
                 $json = json_encode($aaSetting);
-                $cols[OeModule::$DBREC_MODCFG['om_cfg_maint']] =
-                    (json_last_error()==JSON_ERROR_NONE ? $json : print_r($aaSetting, true));
+                $cols[OeModule::$DBREC_MODSET['om_value']] =
+                (json_last_error()==JSON_ERROR_NONE ? $json : print_r($aaSetting, true));
             }
 
             $sql_up = '';
@@ -279,19 +291,102 @@ abstract class OeModule
                 $sql_up .= (count($sql_bind)==0 ? '':',').$dbCol.'=?';
                 array_push($sql_bind, $dbVal);
             }
-            $db_setting = $db_settings[$cols['obj_name']];
+            $db_setting = $db_settings[$cols[OeModule::$DBREC_MODSET['om_key']]];
             if (empty($db_setting)) {
                 array_push($sql_bind, $this_mod_id);
                 $sql_up = sprintf('INSERT INTO modules_settings SET %s, mod_id=?', $sql_up);
             } else {
-                array_push($sql_bind, $this_mod_id, $cols['obj_name']);
+                array_push($sql_bind, $this_mod_id, $cols[OeModule::$DBREC_MODSET['om_key']]);
                 $sql_up = sprintf('UPDATE modules_settings SET %s WHERE mod_id=? and obj_name=?', $sql_up);
             }
             sqlStatement($sql_up, $sql_bind);
         }
-
+        
         $db_settings = $this->getModuleRegProps(false);
         return $db_settings;
+    }
+
+    /**
+     * Get configured values for module.
+     * @Return array - module_configuration table records associated with module.
+     */
+    protected function getModuleCfg($cache_ok=true) {
+        $db_cfg = $this->getProp('db_cfg');
+        if ((!empty($db_cfg)) && $cache_ok) return $db_cfg;
+
+        // Map until db changes are done
+        $mappedCols = '';
+        foreach (OeModule::$DBREC_MODCFG as $ocol => $mcol) {
+            $mappedCols .= ", $mcol as $ocol";
+        }
+
+        $db_cfg = [];
+        $modProps = $this->getModuleRegProps();
+        $rsCfg = sqlStatement(
+            "SELECT module_id $mappedCols from module_configuration WHERE module_id=?",
+            [$modProps['mod_id']]
+            );
+        if ($rsCfg) {
+            while ($recCfg = sqlFetchArray($rsCfg)) {
+                $db_cfg[$recCfg['om_key']] = $recCfg['om_value'];
+            }
+            $this->setProp('db_cfg', $db_cfg);
+        }
+        return $db_cfg;
+    }
+
+    /**
+     * Set configuration for a module - saved in module_configuration table
+     * @param array $aCfgs - array of records using keys for DBREC_MODCFG
+     * @param boolean $allSettings - If true, module configuration is deleted first.
+     * @return array - array of all configured settings.
+     */
+    protected function setModuleCfg($aCfgs, $allSettings=false) {
+        $db_modules = $this->getProp('db_modules');
+        // Must have valid registered module for any settings.
+        if (!$db_modules) return false;
+
+        // Provide ability to clean the slate
+        $this_mod_id = $db_modules['mod_id'];
+        if ($allSettings) {
+            sqlStatement('DELETE from module_configuration WHERE module_id=?', [$this_mod_id]);
+        }
+
+        // Module is expected to provide array of arrays.
+        if (!empty($aCfgs['om_key'])) {
+            // Handle situation when a single record is provided.
+            $aCfgs = [$aCfgs];
+        }
+
+        // Process all setting records
+        $db_cfgs = $this->getProp('db_cfg');
+        foreach ($aCfgs as $aaCfg) {
+            // Map until db changes are done
+            $cols = [];
+            foreach (OeModule::$DBREC_MODCFG as $ocol => $mcol) {
+                $cols[$mcol] = $aaCfg[$ocol];
+                unset($aaCfg[$ocol]);
+            }
+
+            $sql_up = '';
+            $sql_bind = [];
+            foreach ($cols as $dbCol => $dbVal) {
+                $sql_up .= (count($sql_bind)==0 ? '':',').$dbCol.'=?';
+                array_push($sql_bind, $dbVal);
+            }
+            $db_cfg = $db_cfgs[$cols['field_name']];
+            if (empty($db_cfg)) {
+                array_push($sql_bind, $this_mod_id);
+                $sql_up = sprintf('INSERT INTO module_configuration SET %s, module_id=?', $sql_up);
+            } else {
+                array_push($sql_bind, $this_mod_id, $cols['field_name']);
+                $sql_up = sprintf('UPDATE module_configuration SET %s WHERE module_id=? and field_name=?', $sql_up);
+            }
+            sqlStatement($sql_up, $sql_bind);
+        }
+
+        $db_cfgs = $this->getModuleCfg(false);
+        return $db_cfgs;
     }
 
     /**
