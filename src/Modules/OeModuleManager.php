@@ -23,7 +23,7 @@ class OeModuleManager extends OeModule
             'Version' => ['major' => 1, 'minor' => 0]
         ]);
         $this->setPropSub('Tags', ['manage', 'module', 'install', 'configure', 'enable', 'disable']);
-        // Module should come pre-installed.
+        // This module should come pre-installed.
         if (($this->getModuleRegProps())) {
             $this->getModuleCfg();
         } else {
@@ -34,20 +34,38 @@ class OeModuleManager extends OeModule
     // ModuleManager will self install and enble so actionInstall is not available to objects.
     protected function actionInstall() {
         if ($this->getModuleRegProps()) return true;
+        // Typically all code related to a module is organized around class definition file.
+        // For legacy reasons, this module can specify alternate directory
+        $altSrc = dirname(__DIR__, 2).'/modules/OeModule/OmManager';
         $modPropInit = [
             'mod_active' => 1,
             'mod_description' => $this->getProp('Desc'),
             'sql_run' => 1,
+            'directory' => str_replace($GLOBALS['fileroot'], '', $altSrc),
         ];
         $this->setModuleRegProps($modPropInit);
-        // Sample single editable field setup
-        $cbZend = [
-            'om_cfg_key' => 'show_zend',
-            'om_cfg_value' => true,
-            'disp_lbl' => 'Show zhModules',
-            'disp_type' =>'cb',
+
+        // Create module related settings by passing full set of records 
+        $iniSettings = [
+            [
+                'om_key' => 'show_zend',
+                'disp_lbl' => 'Show zhModules',
+                'disp_type' =>'cb',
+            ],
+            [
+                'om_key' => 'listeners',
+                \OpenEMR\Menu\MenuEvent::MENU_UPDATE => 'listenerAppMenuUpdate.php',
+                \OpenEMR\Menu\MenuEvent::MENU_RESTRICT => 'listenerAppMenuRestrict.php',
+            ],
         ];
-        $this->setModuleCfg($cbZend, true);
+        $this->setModuleSettings($iniSettings, true);
+
+        // Set initial values for user configurable variables
+        $iniConfig = [
+            'om_key' => 'show_zend',
+            'om_value' => true,
+        ];
+        $this->setModuleCfg($iniConfig, true);
     }
 
     public function actionConfig() {
