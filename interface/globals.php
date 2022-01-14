@@ -289,6 +289,11 @@ if (file_exists("{$webserver_root}/.env")) {
 //    - TRACE is useful when debugging hard to spot bugs
 $GLOBALS["log_level"] = "OFF";
 
+// DevObj hook
+if (class_exists('Mdsupport\Mdpub\DevObj\DevFile')) {
+    $objFileScript = new Mdsupport\Mdpub\DevObj\DevFile();
+}
+
 try {
     /** @var Kernel */
     $GLOBALS["kernel"] = new Kernel();
