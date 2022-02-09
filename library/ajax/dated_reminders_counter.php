@@ -14,7 +14,20 @@
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
 
-require_once(__DIR__ . "/../../interface/globals.php");
+function trapNoSiteID($strNoSiteID)
+{
+    return json_encode([
+        'status' => 'error',
+        'description' => $strNoSiteID,
+    ]);
+}
+
+// Globals can cause sudden death
+ob_start('trapNoSiteID');
+require_once(dirname(__FILE__, 3). "/interface/globals.php");
+// No output is exprected from globals.php
+ob_end_clean();
+
 require_once("$srcdir/dated_reminder_functions.php");
 require_once("$srcdir/pnotes.inc");
 
