@@ -110,6 +110,16 @@ $esignApi = new Api();
                 }
                 return response.json();
             }).then((data) => {
+                // mdsupport - Check if session has gone away - never a good idea to look for specific message!
+                if (data.hasOwnProperty('status')) {
+                   if ((data.status == 'error')
+                      && (data.description='Site ID is missing from session data!')) {
+                      // This is top window. So logout can be processed.
+                      let tgt = window.location.href;
+                      //tgt.replace('/main/tabs/main.php', '/logout.php');
+                      window.location.href = "../../logout.php";
+                   }
+                }
                 if (data.timeoutMessage && (data.timeoutMessage == 'timeout')) {
                     // timeout has happened, so logout
                     timeoutLogout();
