@@ -17,5 +17,4 @@ Contents
 
    usage
    api
-
    dirDocumentation
