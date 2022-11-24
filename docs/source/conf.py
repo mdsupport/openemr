@@ -35,4 +35,4 @@ html_theme = 'sphinx_rtd_theme'
 epub_show_urls = 'footnote'
 
 # -- Some HTML content included in other directories
-html_static_path = ['_static', '/Documentation', '../../Documentation]
+html_static_path = ['_static', '/Documentation', '../../Documentation']
