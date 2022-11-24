@@ -2,9 +2,9 @@
 
 # -- Project information
 
-project = 'Lumache'
-copyright = '2021, Graziella'
-author = 'Graziella'
+project = 'OpenEMR (Standard)'
+copyright = '2022, MDSupport'
+author = 'MDSupport'
 
 release = '0.1'
 version = '0.1.0'
