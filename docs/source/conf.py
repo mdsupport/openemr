@@ -33,3 +33,6 @@ html_theme = 'sphinx_rtd_theme'
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
+
+# -- Some HTML content included in other directories
+html_static_path = ['_static', '/Documentation', '../../Documentation]
