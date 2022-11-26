@@ -14,7 +14,13 @@ Contents
 --------
 
 .. toctree::
+   :caption: Table of Contents
+   :glob:
 
-   usage
-   api
-   dirDocumentation
+   install*
+   config*
+   user*
+   api*
+   admin*
+   addon*
+   *
