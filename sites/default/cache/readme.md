@@ -1,0 +1,1 @@
+This directory contains hard links to css and js files.

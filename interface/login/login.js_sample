@@ -1,0 +1,13 @@
+/**
+ * Sample file for localizing login screen.
+ * 
+ * OpenEMR <https://open-emr.org>.
+ *
+ * @license https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
+ */
+try {
+  const logos = document.getElementsByClassName("login-emr-logo");
+  logos[0].parentElement.remove();
+} catch (ex) {
+  console.log(ex);
+}

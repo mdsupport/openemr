@@ -1,0 +1,10 @@
+/**
+ * Sample file for localizing calendar screen.
+ * 
+ * OpenEMR <https://open-emr.org>.
+ *
+ * @license https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
+ */
+ 
+ // Example js code
+document.querySelectorAll('.btn').forEach(e => e.classList.add('btn-sm'));

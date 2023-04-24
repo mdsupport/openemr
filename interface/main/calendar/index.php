@@ -23,6 +23,7 @@ require_once 'includes/pnAPI.php';
 
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Session\SessionUtil;
+use OpenEMR\OeUI\OeScripts;
 
 // these will be used in below SessionUtil::setSession to set applicable session variables
 $sessionSetArray = [];
@@ -180,7 +181,12 @@ if ((empty($return)) || ($return == false)) {
     $output->Text($return);
     $output->SetInputMode(_PNH_PARSEINPUT);
     //$output->EndPage();
+    $objScripts = new OeScripts();
+    ob_start();
     $output->PrintPage();
+    $pnOut = ob_get_contents();
+    ob_end_clean();
+    print $objScripts->injectBefore($pnOut, "</body>");
 } else {
     // duh?
 }
