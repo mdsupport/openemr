@@ -23,8 +23,15 @@ class OeScripts
 {
     private $scripts = [];
     
-    public function __construct($initscandir=null) {
-        if (empty($initscandir)) {
+    public function __construct($aScripts=[], $chksrcjs=true) {
+        // Convert string to single element array
+        if (!is_array($aScripts)) {
+            $aScripts = [$aScripts];
+        }
+        foreach ($aScripts as $aScript) {
+            $this->add($aScript);
+        }
+        if ($chksrcjs) {
             $osjs = sprintf('%s.js', explode(".", $_SERVER['SCRIPT_FILENAME'], -1)[0]);
             $this->add($osjs);
         }
@@ -38,15 +45,25 @@ class OeScripts
         if (!$objScr->isFile()) {
             return false;
         }
+        $os_src_hash = hash('crc32', $tagAttrs['os_src']);
         // Manage link
         $src_symlink = sprintf(
             '/cache/%s_%s.js',
-            hash('crc32', $tagAttrs['os_src']), $objScr->getMTime()
+            $os_src_hash, $objScr->getMTime()
         );
         
         if (!file_exists($GLOBALS['OE_SITE_DIR'].$src_symlink)) {
+            // Unlink existing symlinks
+            $xsymlinks = sprintf(
+                '%s/cache/%s_*.js',
+                $GLOBALS['OE_SITE_DIR'], $os_src_hash
+            );
+            $symlinks = glob($xsymlinks);
+            array_map('unlink', $symlinks);
+            // Create new symlink
             symlink($tagAttrs['os_src'], $GLOBALS['OE_SITE_DIR'].$src_symlink);
         }
+
         $tagDefaults = [
             'async' => null,
             'defer' => null,
