@@ -206,6 +206,13 @@ if (session_name()) {
     $cookie = json_encode($cookie);
 }
 
+// DevObj hook
+if (isset($objFileScript)) {
+    $div_app = $objFileScript->loadDevObjs([
+        'match' => ['type' => 'require_once']
+    ]);
+}
+
 $viewArgs = [
     'title' => $openemr_name,
     'displayLanguage' => ($GLOBALS["language_menu_login"] && (count($languageList) != 1)) ? true : false,
@@ -235,6 +242,7 @@ $viewArgs = [
     'displaySecondaryLogo' => $GLOBALS['extra_logo_login'],
     'secondaryLogo' => $secondaryLogo,
     'secondaryLogoPosition' => $GLOBALS['secondary_logo_position'],
+    'divApp' => $div_app,
 ];
 
 /**
