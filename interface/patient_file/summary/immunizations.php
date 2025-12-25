@@ -764,9 +764,48 @@ tr.selected {
                         </tr>
 
                         <?php
+                        // mdsupport - Include IR transmission result indicator in completion column
+                        $aStatIR = [];
+                        $rsLog = sqlQuery("SHOW TABLES LIKE ?", ["hl7log"]);
+                        if ($rsLog) {
+                            $rsLog = sqlStatement("
+                                SELECT hl7.link_key id, hl7.msg_result status
+                                FROM hl7log hl7
+                                INNER JOIN immunizations imm ON hl7.link_key=imm.id
+                                WHERE imm.patient_id=?
+                                  AND hl7.link_source=?
+                                  AND hl7.msg_type=?
+                                ",
+                                [$pid, "immunizations", "VXU"]
+                                );
+                            while ($recLog = sqlFetchArray($rsLog)) {
+                                $aStatIR[$recLog['id']] = $recLog['status'];
+                            }
+                        }
+                        
                         $result = getImmunizationList($pid, ($_GET['sortby'] ?? null), true);
 
                         while ($row = sqlFetchArray($result)) {
+                            // Include IR Status
+                            $statusIR = '';
+                            if (isset($aStatIR[$row['id']])) {
+                                switch ($aStatIR[$row['id']]) {
+                                    case 'AA':
+                                        $statusIR = 'primary';
+                                        break;
+                                    case 'AE':
+                                        $statusIR = 'warning';
+                                        break;
+                                    case 'AE':
+                                        $statusIR = 'danger';
+                                        break;
+                                }
+                                $statusIR = "
+                                    <span class='text-{$statusIR}'>
+                                        <i class='fa-solid fa-registered ml-2'></i>
+                                    </span>
+                                ";
+                            }
                             $isError = $row['added_erroneously'];
 
                             $tr_title = $isError ? 'title="' . xla("Entered in Error") . '"' : "";
@@ -820,7 +859,7 @@ tr.selected {
                             echo "<td>" . $del_tag_open . generate_display_field(['data_type' => '1','list_id' => 'drug_route'], $row['route']) . $del_tag_close . "</td>";
                             echo "<td>" . $del_tag_open . generate_display_field(['data_type' => '1','list_id' => 'immunization_administered_site'], $row['administration_site']) . $del_tag_close . "</td>";
                             echo "<td>" . $del_tag_open . text($row["note"]) . $del_tag_close . "</td>";
-                            echo "<td>" . $del_tag_open . generate_display_field(['data_type' => '1','list_id' => 'Immunization_Completion_Status'], $row['completion_status']) . $del_tag_close . "</td>";
+                            echo "<td>" . $del_tag_open . generate_display_field(['data_type' => '1','list_id' => 'Immunization_Completion_Status'], $row['completion_status']) . $statusIR  . $del_tag_close . "</td>";
 
                             $checkbox = $isError ? "checked" : "";
 
