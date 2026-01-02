@@ -22,33 +22,66 @@
  * @link    http://www.open-emr.org
  **/
 
+// mdsupport - eSign Batch
+// Add following conditions if needed
+// - Encounters older than n days
+//   AND DATEDIFF(CURDATE(), enc.date) > ?
+
+$batchMax = 50;
+$rsOpen = sqlQuery("
+    SELECT GROUP_CONCAT(fm.encounter SEPARATOR ',') encs from forms fm
+    INNER JOIN form_encounter enc ON fm.form_id = enc.id AND fm.encounter = enc.encounter
+    LEFT OUTER JOIN esign_signatures sig ON fm.encounter = sig.tid
+    WHERE fm.formdir = ?
+      AND fm.deleted = 0
+      AND sig.tid IS NULL
+      AND ? IN (fm.provider_id, enc.provider_id, enc.supervisor_id)
+      AND enc.encounter <> ?
+    LIMIT ?
+    ",
+    [ 'newpatient', $_SESSION['authUserID'], $this->form->encounterId, $batchMax ]
+);
+$encsOpen = (isset($rsOpen['encs']) ? count(explode(',', $rsOpen['encs'])) : 0);
+if ($encsOpen) {
+    $encBatch = $this->form->encounterId . ',' . $rsOpen['encs'];
+}
 ?>
+
 <div id='esign-form-container'>
     <form id='esign-signature-form' method='post' action='<?php echo attr($this->form->action); ?>'>
+    <div class="modal-header">
+       <h6 class="modal-title"><?php echo xlt('eSign encounter');?></h6>
+    </div>
+    
+    <div class="modal-body">
 
-        <div class="esign-signature-form-element">
-              <span id='esign-signature-form-prompt'><?php echo xlt("Your password is your signature"); ?></span>
-        </div>
-
-        <div class="esign-signature-form-element gs-hide-element">
-              <label for='password'><?php echo xlt('Password');?></label>
-              <input type='password' id='password' name='password' size='10' />
-        </div>
-
-        <div class="esign-signature-form-element gs-hide-element">
-              <span id='esign-signature-form-prompt'><?php echo xlt("Checking the lock checkbox will prevent any futher edits on any forms in this encounter."); ?></span>
+        <div class="gs-hide-element form-group">
+              <label class="mb-0" for='password'><?php echo xlt('Encounter Signature');?></label>
+              <input class='form-control' type='password' id='password' name='password' placeholder="<?php echo xlt("Your password is your signature"); ?>" />
         </div>
 
         <?php if ($this->form->showLock) { ?>
-        <div class="esign-signature-form-element">
-              <label for='lock'><?php echo xlt('Lock?');?></label>
-              <input type="checkbox" id="lock" name="lock" />
+        <div class="form-group form-check">
+              <input class="form-check-input" type="checkbox" id="lock" name="lock" />
+              <label class="form-check-label" for='lock'>
+                  <?php echo xlt('Prevent further edits to all forms in this encounter?');?>
+              </label>
         </div>
         <?php } ?>
 
-        <div class="esign-signature-form-element">
-              <textarea name='amendment' id='amendment' placeholder='<?php echo xla("Enter an amendment..."); ?>'></textarea>
+        <div class="form-group">
+              <label class="mb-0" for='amendment'><?php echo xlt('Amendment');?></label>
+              <textarea  class="form-control" rows="3" name='amendment' id='amendment' placeholder='<?php echo xla("Enter an amendment..."); ?>'></textarea>
         </div>
+
+        <?php if ($encsOpen) { ?>
+        <div class="form-group form-check">
+              <input class="form-check-input" type="checkbox" id="chkBatchEncs" name="chkBatchEncs" />
+              <label class="form-check-label" for='chkBatchEncs'>
+                  <?php echo xlt('eSign'). ' '. $encsOpen . ' '. xlt('additional unsigned encounter(s)') . '?';?>
+              </label>
+        </div>
+        <?php } ?>
 
         <!-- Google sign in for esign -->
         <?php if ($this->form->displayGoogleSignin) { ?>
@@ -69,28 +102,39 @@
             </div>
           </div>
         <?php } ?>
-
-        <div class="esign-signature-form-element">
-              <input type='submit' class="btn btn-secondary btn-sm" value='<?php echo xla('Back'); ?>' id='esign-back-button' />
-              <input type='button' class="btn btn-primary btn-sm" value='<?php echo xla('Sign'); ?>' id='esign-sign-button-encounter' />
         </div>
 
         <input type='hidden' id='table' name='table' value='<?php echo attr($this->form->table); ?>' />
         <input type='hidden' id='encounterId' name='encounterId' value='<?php echo attr($this->form->encounterId); ?>' />
         <input type='hidden' id='userId' name='userId' value='<?php echo attr($this->form->userId); ?>' />
 
+        <div class="modal-footer">
+        <input type='submit' class="btn btn-secondary btn-sm" value='<?php echo xla('Back'); ?>' id='esign-back-button' />
+        <div class="form-group">
+              <input type='button' class="btn btn-primary btn-sm" value='<?php echo xla('Sign'); ?>' id='esign-sign-button-encounter' />
+        </div>
+        </div>
     </form>
 </div>
 
-<!-- Google sign in for esign -->
+<script>
+<?php if ($encsOpen) { ?>
+  // Batch eSign - If checked, use batch otherwise use single
+  let toggleBatchEncs = document.getElementById('chkBatchEncs');
+  toggleBatchEncs.addEventListener('change', function() {
+    let hiddenInput = document.getElementById('encounterId');
+    hiddenInput.value = (this.checked ? <?php echo sprintf('"%s":"%s"', attr($encBatch), attr($this->form->encounterId));?>);
+  });
+<?php } ?>
+
 <?php if ($this->form->displayGoogleSignin) { ?>
-<script type="text/javascript">
+    // Google sign in for esign
     let gsi = Object.create(GoogleSigin);
     gsi.init(<?php echo js_escape($this->form->googleSigninClientID); ?>, {
       ele : '#esign-form-container',
       signin_btn : '#esign-sign-button-encounter',
       error_container : '#esign-signature-form'
     });
-</script>
 <?php } ?>
+</script>
 <!-- End -->

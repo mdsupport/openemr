@@ -113,12 +113,30 @@ class Encounter_Controller extends Abstract_Controller
         }
 
         if ($valid) {
-            $signable = new Encounter_Signable($encounterId);
-            if ($signable->sign($_SESSION['authUserID'], $lock, $amendment)) {
-                $message = xlt("Form signed successfully");
-                $status = self::STATUS_SUCCESS;
+            // mdsupport - Allow batch of encounters
+            if (strpos($encounterId, ',') === false) {
+                $signable = new Encounter_Signable($encounterId);
+                if ($signable->sign($_SESSION['authUserID'], $lock, $amendment)) {
+                    $message = xlt("Form signed successfully");
+                    $status = self::STATUS_SUCCESS;
+                } else {
+                    $message = xlt("An error occured signing the form");
+                }
             } else {
-                $message = xlt("An error occured signing the form");
+                $batchEncs = explode(',', $encounterId);
+                $batchMsg = [];
+                foreach ($batchEncs as $batchEnc) {
+                    $batchEnc = trim($batchEnc);
+                    if (empty($batchEnc)) continue;
+                    $signable = new Encounter_Signable($batchEnc);
+                    if ($signable->sign($_SESSION['authUserID'], $lock, $amendment)) {
+                        $batchMsg[] = sprintf("%s %s", $batchEnc, xlt("signed"));
+                        $status = self::STATUS_SUCCESS;
+                    } else {
+                        $batchMsg[] = sprintf("%s %s", $batchEnc, xlt("error"));
+                    }
+                }
+                $message = implode(', ', $batchMsg);
             }
         } else {
             $message = (isset($gMessage) && !empty($gMessage)) ? $gMessage : xlt("The password you entered is invalid");
