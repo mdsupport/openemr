@@ -307,12 +307,12 @@ function checkBackgroundServices(): void
         $auditLogStatusNew = sqlQuery("SELECT `gl_value` FROM `globals` WHERE `gl_name` = 'enable_auditlog'");
         $auditLogStatusFieldNew = $auditLogStatusNew['gl_value'];
         if ($auditLogStatusFieldOld != $auditLogStatusFieldNew) {
-            EventAuditLogger::getInstance()->auditSQLAuditTamper('enable_auditlog', $auditLogStatusFieldNew);
+            EventAuditLogger::instance()->auditSQLAuditTamper('enable_auditlog', $auditLogStatusFieldNew);
         }
         $forceBreakglassLogStatusNew = sqlQuery("SELECT `gl_value` FROM `globals` WHERE `gl_name` = 'gbl_force_log_breakglass'");
         $forceBreakglassLogStatusFieldNew = $forceBreakglassLogStatusNew['gl_value'];
         if ($forceBreakglassLogStatusFieldOld != $forceBreakglassLogStatusFieldNew) {
-            EventAuditLogger::getInstance()->auditSQLAuditTamper('gbl_force_log_breakglass', $forceBreakglassLogStatusFieldNew);
+            EventAuditLogger::instance()->auditSQLAuditTamper('gbl_force_log_breakglass', $forceBreakglassLogStatusFieldNew);
         }
 
         echo "<script>";
@@ -380,10 +380,11 @@ function checkBackgroundServices(): void
     </script>
 </head>
 
-<body <?php if ($userMode) {
-    echo 'style="min-width: 700px;"';
-      } ?>>
-
+<body <?php echo ($userMode ? 'style="min-width: 700px;"' : ''); ?>>
+    <form method='post' name='theform' id='theform' class='form-horizontal' 
+      onsubmit='return top.restoreSession()'
+      action='edit_globals.php<?php echo ($userMode ? "?mode=user" : "") ?>'> 
+    <input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
     <div id="container_div" class="<?php echo $oemr_ui->oeContainer(); ?> mt-2">
         <div class="row">
             <div class="col-sm-12 px-0 my-2">
@@ -391,28 +392,36 @@ function checkBackgroundServices(): void
             </div>
         </div>
         <div class="row">
+          <div class="col-sm-12 px-0">
+            <div class="clearfix">
+              <div class="btn-group oe-margin-b-10">
+                <button type='submit'
+                  class='btn btn-primary btn-save oe-pull-toward'
+                  name='form_save' value='<?php echo xla('Save'); ?>
+                  '>
+                  <?php echo xlt('Save'); ?>
+                </button>
+              </div>
+                <div class="col-sm-4 oe-pull-away p-0">
+                    <div class="input-group">
+                        <input name="srch_desc" id="srch_desc" class="form-control" type="search"
+                               placeholder="<?php echo $placeholder; ?>"
+                               value="<?php echo (!empty($_POST['srch_desc']) ? attr($_POST['srch_desc']) : '') ?>" />
+                
+                        <button class="btn btn-secondary btn-search" type="submit"
+                                id="globals_form_search" name="form_search"
+                                title='<?php echo xlt('Search'); ?>'>
+                            <span id="searchBadge" class="d-none position-absolute translate-middle badge rounded-pill bg-info text-black m-1 p-1" 
+                                 style="font-size: 0.8rem; top: 20px; right:10px;">
+                             </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
             <div class="col-sm-12 px-0">
-                <?php if ($userMode) { ?>
-                <form method='post' name='theform' id='theform' class='form-horizontal' action='edit_globals.php?mode=user' onsubmit='return top.restoreSession()'>
-                    <?php } else { ?>
-                    <form method='post' name='theform' id='theform' class='form-horizontal' action='edit_globals.php' onsubmit='return top.restoreSession()'>
-                        <?php } ?>
-                        <input type="hidden" name="csrf_token_form" value="<?php echo attr(CsrfUtils::collectCsrfToken()); ?>" />
-                        <div class="clearfix">
-                            <div class="btn-group oe-margin-b-10">
-                                <button type='submit' class='btn btn-primary btn-save oe-pull-toward' name='form_save' value='<?php echo xla('Save'); ?>'><?php echo xlt('Save'); ?></button>
-                            </div>
-                            <div class="input-group col-sm-4 oe-pull-away p-0">
-                                <?php // mdsupport - Optional server based searching mechanism for large number of fields on this screen.
-                                $placeholder = !$userMode ? xla('Search configuration') : xla('Search user settings');
-                                ?>
-                                <input name='srch_desc' id='srch_desc' class='form-control' type='text' placeholder='<?php echo $placeholder; ?>' value='<?php echo(!empty($_POST['srch_desc']) ? attr($_POST['srch_desc']) : '') ?>' />
-                                <span class="input-group-append">
-                            <button class="btn btn-secondary btn-search" type='submit' id='globals_form_search' name='form_search'><?php echo xlt('Search'); ?></button>
-                        </span>
-                            </div><!-- /input-group -->
-                        </div>
-                        <br />
                         <div id="globals-div">
                             <ul class="tabNav tabWidthWide sticky-top" id="oe-nav-ul">
                                 <?php
@@ -816,12 +825,12 @@ function checkBackgroundServices(): void
                                 ?>
                             </div><!--End of tabContainer div-->
                         </div><!--End of globals-div div-->
-                    </form>
             </div>
         </div>
     </div><!--End of container div-->
     <?php $oemr_ui->oeBelowContainerDiv(); ?>
     </div>
+    </form>
     <?php
     $post_srch_desc = $_POST['srch_desc'] ?? '';
     if (!empty($post_srch_desc) && $srch_item == 0) {
@@ -877,5 +886,6 @@ function checkBackgroundServices(): void
             return false;
         });
     </script>
+    <script src="edit_globals_search.js"></script>
 </body>
 </html>
