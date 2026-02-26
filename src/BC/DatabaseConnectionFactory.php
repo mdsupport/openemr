@@ -55,7 +55,6 @@ class DatabaseConnectionFactory
             }
             if ($_SESSION) {
                 $_SESSION['_DB_UNIX_SOCKET'] = $fnConnectResult;
-                error_log("Socket : $fnConnectResult");
             }
         }
         
