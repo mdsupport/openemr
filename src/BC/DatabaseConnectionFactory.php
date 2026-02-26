@@ -38,29 +38,45 @@ class DatabaseConnectionFactory
             $conn->ssl_key = $config->sslClientCert['key'] ?? null;
         }
 
-        // Sockets? It's supported on paper but unclear now to configure.
-        assert($config->host !== null);
-
-        $conn->port = $config->port;
-        if ($persistent) {
-            $conn->PConnect(
-                argHostname: $config->host,
-                argUsername: $config->user,
-                argPassword: $config->password,
+        $fnConnect = $persistent ? 'PConnect' : 'Connect';
+        $fnConnectResult = false;
+        
+        // Try Sockets at least once for a session
+        if ($_SESSION['_DB_UNIX_SOCKET'] ?? true) {
+            $conn->socket = ($config->socket ?? "/var/run/mysqld/mysqld.sock");
+            $fnConnectResult = $conn->$fnConnect(
+                argHostname: 'localhost',
+                argUsername: posix_getpwuid(posix_geteuid())['name'],
+                argPassword: '',
                 argDatabaseName: $config->dbname,
             );
-        } else {
-            $conn->Connect(
-                argHostname: $config->host,
-                argUsername: $config->user,
-                argPassword: $config->password,
-                argDatabaseName: $config->dbname,
-            );
+            if (!$fnConnectResult) {
+                unset($conn->socket);
+            }
+            if ($_SESSION) {
+                $_SESSION['_DB_UNIX_SOCKET'] = $fnConnectResult;
+                error_log("Socket : $fnConnectResult");
+            }
+        }
+        
+        // Fall back
+        if (!$fnConnectResult) {
+            assert($config->host !== null);
+    
+            $conn->port = $config->port;
+            $fnConnectResult = $conn->$fnConnect(
+                    argHostname: $config->host,
+                    argUsername: $config->user,
+                    argPassword: $config->password,
+                    argDatabaseName: $config->dbname,
+                );
         }
 
-        $conn->ExecuteNoLog("SET NAMES '$config->charset'");
-        // "Turn off STRICT SQL"
-        $conn->ExecuteNoLog("SET sql_mode = ''");
+        if ($fnConnectResult) {
+            $conn->ExecuteNoLog("SET NAMES '$config->charset'");
+            // "Turn off STRICT SQL"
+            $conn->ExecuteNoLog("SET sql_mode = ''");
+        }
 
         // Other paths may end up customizing this further.
 
